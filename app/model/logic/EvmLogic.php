@@ -169,6 +169,9 @@ final class EvmLogic
 
     public function transfer($rpc_url, $chain_id, $amount, $token_address, $from_address, $private_key, $to_address)
     {
+        $success = 0;
+        $transactionHash = "";
+
         //check it is main coin or not
         $main_coin = $token_address ? false : true;
         $amount = Utils::toHex($amount, true);
@@ -177,34 +180,33 @@ final class EvmLogic
         $contract = new Contract($web3->provider, $this->abi());
         $nonce = 0;
 
-        $web3->eth->getTransactionCount($from_address, "pending", function ($err, $result) use (&$nonce) {
+        $web3->eth->getTransactionCount($from_address, "pending", function ($err, $result) use (&$nonce, &$success) {
             if ($err) {
                 Log::error("transaction count error: " . $err->getMessage());
             } else {
                 $nonce = gmp_intval($result->value);
+                $success++;
             }
         });
 
         $gas_price = 0;
-        $eth->gasPrice(function ($err, $resp) use (&$gas_price) {
+        $eth->gasPrice(function ($err, $resp) use (&$gas_price, &$success) {
             if ($err) {
                 Log::error("gas price error: " . $err->getMessage());
             } else {
                 $gas_price = gmp_intval($resp->value);
+                $success++;
             }
         });
 
         $params = [
             "nonce" => $nonce,
             "from" => $from_address,
-            "to" => !$main_coin ? $token_address : $to_address,
+            "to" => $main_coin ? $to_address : $token_address,
         ];
 
-        if ($main_coin) {
-            $params["to"] = $to_address;
-        } else {
+        if (!$main_coin) {
             $data = $contract->at($token_address)->getData("transfer", $to_address, $amount);
-            $params["to"] = $token_address;
             $params["data"] = $data;
         }
 
@@ -214,46 +216,48 @@ final class EvmLogic
         } else {
             $contract
                 ->at($token_address)
-                ->estimateGas("transfer", $to_address, $amount, $params, function ($err, $resp) use (&$es) {
+                ->estimateGas("transfer", $to_address, $amount, $params, function ($err, $resp) use (&$es, &$success) {
                     if ($err) {
                         Log::error("estimate gas error: " . $err->getMessage());
                     } else {
                         $es = $resp->toString();
+                        $success++;
                     }
                 });
         }
 
-        // withdraw gas price multiplier from setting general
-        $setting = SettingLogic::get("general", ["category" => "withdraw", "code" => "withdraw_gasprice_multiplier"]);
-        $multiply = $setting["value"] ?? 1;
+        if ($success == 3) {
+            // withdraw gas price multiplier from setting general
+            $setting = SettingLogic::get("general", ["category" => "withdraw", "code" => "withdraw_gasprice_multiplier"]);
+            $multiply = $setting["value"] ?? 1;
 
-        $nonce = Utils::toHex($nonce, true);
-        $gas = Utils::toHex(intval($gas_price * $multiply), true);
-        $gas_limit = Utils::toHex($es, true);
+            $nonce = Utils::toHex($nonce, true);
+            $gas = Utils::toHex(intval($gas_price * $multiply), true);
+            $gas_limit = Utils::toHex($es, true);
 
-        if ($main_coin) {
-            $to = $to_address;
-            $value = $amount;
-            $data = "";
-        } else {
-            $to = $token_address;
-            $value = Utils::toHex(0, true);
-            $data = sprintf("0x%s", $data);
-        }
-
-        $transaction = new Transaction($nonce, $gas, $gas_limit, $to, $value, $data);
-
-        $signedTransaction = "0x" . $transaction->getRaw($private_key, $chain_id);
-
-        // send signed transaction
-        $transactionHash = "";
-        $web3->eth->sendRawTransaction($signedTransaction, function ($err, $data) use (&$transactionHash) {
-            if ($err) {
-                Log::error("send raw transaction error: " . $err->getMessage());
+            if ($main_coin) {
+                $to = $to_address;
+                $value = $amount;
+                $data = "";
             } else {
-                $transactionHash = $data;
+                $to = $token_address;
+                $value = Utils::toHex(0, true);
+                $data = sprintf("0x%s", $data);
             }
-        });
+
+            $transaction = new Transaction($nonce, $gas, $gas_limit, $to, $value, $data);
+
+            $signedTransaction = "0x" . $transaction->getRaw($private_key, $chain_id);
+
+            // send signed transaction
+            $web3->eth->sendRawTransaction($signedTransaction, function ($err, $data) use (&$transactionHash) {
+                if ($err) {
+                    Log::error("send raw transaction error: " . $err->getMessage());
+                } else {
+                    $transactionHash = $data;
+                }
+            });
+        }
 
         return $transactionHash;
     }
