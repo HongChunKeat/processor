@@ -19,23 +19,23 @@ final class EvmLogic
 {
     public static function getBlockNumber(string $rpc_url)
     {
-        $error = 0;
+        $success = 0;
         $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpc_url, 2)));
 
         $block = 0;
-        $web3->eth->blockNumber(function ($err, $data) use (&$block, &$error) {
+        $web3->eth->blockNumber(function ($err, $data) use (&$block, &$success) {
             if ($err) {
                 Log::error("blockNumber err", ["err" => $err]);
-                $error++;
             } else {
                 $block = (int) $data->toString();
+                $success++;
             }
         });
 
-        if ($error > 0) {
-            return false;
-        } else {
+        if ($success == 1) {
             return $block;
+        } else {
+            return false;
         }
     }
 
@@ -178,7 +178,7 @@ final class EvmLogic
         $nonce = 0;
 
         $web3->eth->getTransactionCount($from_address, "pending", function ($err, $result) use (&$nonce) {
-            if ($err !== null) {
+            if ($err) {
                 Log::error("transaction count error: " . $err->getMessage());
             } else {
                 $nonce = gmp_intval($result->value);
@@ -187,7 +187,7 @@ final class EvmLogic
 
         $gas_price = 0;
         $eth->gasPrice(function ($err, $resp) use (&$gas_price) {
-            if ($err !== null) {
+            if ($err) {
                 Log::error("gas price error: " . $err->getMessage());
             } else {
                 $gas_price = gmp_intval($resp->value);
@@ -248,7 +248,7 @@ final class EvmLogic
         // send signed transaction
         $transactionHash = "";
         $web3->eth->sendRawTransaction($signedTransaction, function ($err, $data) use (&$transactionHash) {
-            if ($err != null) {
+            if ($err) {
                 Log::error("send raw transaction error: " . $err->getMessage());
             } else {
                 $transactionHash = $data;
@@ -267,7 +267,7 @@ final class EvmLogic
         int $endBlock = 0
     ) {
         $depositRecords = [];
-        $error = 0;
+        $success = 0;
 
         try {
             $decimal = 18;
@@ -291,23 +291,23 @@ final class EvmLogic
                 "topics" => $topics,
             ];
 
-            $filter = null;
-            $web3->eth->newFilter($params, function ($err, $data) use (&$filter, &$error) {
+            $filter = 0;
+            $web3->eth->newFilter($params, function ($err, $data) use (&$filter, &$success) {
                 if ($err) {
                     Log::error("web3 eth newFilter: " . $err);
-                    $error++;
                 } else {
                     $filter = $data;
+                    $success++;
                 }
             });
 
             $rawRecords = [];
-            $web3->eth->getFilterLogs($filter, function ($err, $data) use (&$rawRecords, &$error) {
+            $web3->eth->getFilterLogs($filter, function ($err, $data) use (&$rawRecords, &$success) {
                 if ($err) {
                     Log::error("web3 eth getFilterLogs: " . $err);
-                    $error++;
                 } else {
                     $rawRecords = $data;
+                    $success++;
                 }
             });
 
@@ -327,10 +327,10 @@ final class EvmLogic
         } catch (\Exception $e) {
         }
 
-        if ($error > 0) {
-            return false;
-        } else {
+        if ($success == 2) {
             return json_encode($depositRecords);
+        } else {
+            return false;
         }
     }
 

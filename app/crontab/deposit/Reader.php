@@ -13,7 +13,6 @@ class Reader extends BaseTask
         # [process with queue]
         RedisQueue::send("reader", [
             "type" => "deposit",
-            "data" => []
         ]);
     }
 }

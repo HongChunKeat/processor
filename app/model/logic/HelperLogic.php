@@ -3,6 +3,10 @@ declare(strict_types=1);
 
 namespace app\model\logic;
 
+# library
+use support\Db;
+# database & logic
+
 final class HelperLogic
 {
     # generate random keys

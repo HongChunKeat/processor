@@ -27,32 +27,26 @@ class ReaderTransaction implements Consumer
     {
         switch ($queue["type"]) {
             case "deposit":
-                $this->deposit($queue["data"]);
+                $this->deposit();
                 break;
             case "nft":
-                $this->nft($queue["data"]);
+                $this->nft();
                 break;
         }
     }
 
-    private function deposit($data)
+    private function deposit()
     {
-        $success = SettingLogic::get("operator", ["code" => "success"]);
-        $topUp = SettingLogic::get("operator", ["code" => "top_up"]);
-
         $settingDeposits = SettingDepositModel::where("is_active", 1)->get();
 
         foreach ($settingDeposits as $settingDeposit) {
-            // Get setting coin info
-            $coin = SettingLogic::get("coin", ["id" => $settingDeposit["coin_id"]]);
-
             // Get setting network info
             $settingNetwork = SettingLogic::get("blockchainNetwork", ["id" => $settingDeposit["network"]]);
-            if (!$settingNetwork["rpc_url"]) {
+            if (!$settingNetwork || empty($settingNetwork["rpc_url"])) {
                 continue;
             }
 
-            // Get evm latest block & db latest block
+            // Get contract address latest block & db latest block
             $endBlock = EvmLogic::getBlockNumber($settingNetwork["rpc_url"]);
 
             $startBlock = $settingDeposit["latest_block"];
@@ -62,24 +56,23 @@ class ReaderTransaction implements Consumer
                 $startBlock = $endBlock - 1000;
             }
 
+            // If difference block more than 30, then $endBlock = $startBlock + 30
             $differenceBlock = $endBlock - $startBlock;
-
-            // If difference block more than 20 $endBlock will get $startBlock + 20
-            if ($differenceBlock >= 30) {
+            if ($differenceBlock > 30) {
                 $endBlock = $startBlock + 30;
             }
 
-            // Retrieve deposit records for the token address and network
+            // Retrieve records from the contract address and network
             $recordReaders = EvmLogic::recordReader(
                 $settingDeposit["token_address"],
                 $settingNetwork["rpc_url"],
                 null,
                 $settingDeposit["address"],
-                $startBlock + 1,
+                ($startBlock < $endBlock) ? $startBlock + 1 : $startBlock,
                 $endBlock
             );
 
-            echo $endBlock . "|" . $recordReaders . "\n";
+            echo $startBlock . "|" . $endBlock . "|" . $recordReaders . "\n";
 
             // if end block and record reader no error
             if ($endBlock && $recordReaders) {
@@ -89,11 +82,7 @@ class ReaderTransaction implements Consumer
                 if ($recordLists) {
                     foreach ($recordLists as $recordList) {
                         // Check if the user exists based on the 'from_address'
-                        $user = AccountUserModel::where(
-                            Db::raw("LOWER(web3_address)"),
-                            "=",
-                            strtolower($recordList->from_address)
-                        )
+                        $user = AccountUserModel::where(Db::raw("LOWER(web3_address)"), strtolower($recordList->from_address))
                             ->where("status", "active")
                             ->first();
 
@@ -102,6 +91,12 @@ class ReaderTransaction implements Consumer
 
                         // if user in account_user & txid and log index not exist in user_deposit
                         if ($user && !$userDeposit) {
+                            $success = SettingLogic::get("operator", ["code" => "success"]);
+                            $topUp = SettingLogic::get("operator", ["code" => "top_up"]);
+
+                            // Get setting coin info
+                            $coin = SettingLogic::get("coin", ["id" => $settingDeposit["coin_id"]]);
+
                             # [create query]
                             $res = UserDepositModel::create([
                                 "sn" => HelperLogic::randomCode(),
@@ -138,7 +133,7 @@ class ReaderTransaction implements Consumer
         }
     }
 
-    private function nft($data)
+    private function nft()
     {
     }
 }
