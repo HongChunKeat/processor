@@ -1,0 +1,8 @@
+ARG WEBMAN_DOCKER_VERSION=8.1-cli-alpine
+
+# https://github.com/krissss/docker-webman
+FROM krisss/docker-webman:$WEBMAN_DOCKER_VERSION
+
+# 增加额外的扩展
+#RUN install-php-extensions imagick
+RUN install-php-extensions amqp gmp

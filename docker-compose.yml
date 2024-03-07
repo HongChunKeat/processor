@@ -1,0 +1,12 @@
+version: "3.8"
+
+services:
+    webman-processor:
+        image: skywolves/docker-webman:1.0.0
+        container_name: webman-processor
+        working_dir: /var/www/processor
+        ports:
+            - "6262:6262" # processor
+        volumes:
+            - .:/var/www/processor
+        command: sh -c "composer install && php start.php start"
