@@ -165,7 +165,7 @@ final class EvmLogic
             $multiply = $setting["value"] ?? 1;
 
             $nonce = Utils::toHex($nonce, true);
-            $gas = Utils::toHex(intval($gas_price * $multiply), true);
+            $gas = Utils::toHex(intval($gasPrice * $multiply), true);
             $gasLimit = Utils::toHex($es, true);
 
             if ($mainCoin) {
