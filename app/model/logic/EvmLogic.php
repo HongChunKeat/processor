@@ -17,10 +17,10 @@ use kornrunner\Keccak;
 
 final class EvmLogic
 {
-    public static function getBlockNumber(string $rpc_url)
+    public static function getBlockNumber(string $rpcUrl)
     {
         $success = 0;
-        $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpc_url, 2)));
+        $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpcUrl, 2)));
 
         $block = 0;
         $web3->eth->blockNumber(function ($err, $data) use (&$block, &$success) {
@@ -39,86 +39,19 @@ final class EvmLogic
         }
     }
 
-    public function getTransactionLog(
-        string $rpc_url,
-        string $contract_address,
-        int $start_block,
-        int $block_range = 30
-    ): array {
-        $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpc_url, 2)));
-
-        $now_block = $this->getBlockNumber($rpc_url);
-        $end_block = $start_block + $block_range;
-        if ($end_block > $now_block) {
-            $end_block = $now_block;
-        }
-
-        $decimal = $this->getDecimals($rpc_url, $contract_address);
-
-        $params = [
-            "fromBlock" => "0x" . dechex($start_block),
-            "toBlock" => "0x" . dechex($end_block),
-            "address" => $contract_address,
-        ];
-
-        $filter = null;
-        $web3->eth->newFilter($params, function ($err, $data) use (&$filter) {
-            if ($err) {
-                Log::error("newFilter err", ["err" => $err]);
-            } else {
-                $filter = $data;
-            }
-        });
-
-        $logs = [];
-        $web3->eth->getFilterLogs($filter, function ($err, $data) use (&$logs) {
-            if ($err) {
-                Log::error("getFilterLogs err", ["err" => $err]);
-            } else {
-                $logs = $data;
-            }
-        });
-
-        $list = [];
-        foreach ($logs as $log) {
-            $event_name = $log->topics[0];
-            $from_address = strtolower(str_replace("0x000000000000000000000000", "0x", $log->topics[1]));
-            $to_address = strtolower(str_replace("0x000000000000000000000000", "0x", $log->topics[2]));
-            $value = $this->hexdec2dec($log->data);
-            $txid = $log->transactionHash;
-            $block = hexdec($log->blockNumber);
-
-            $list[] = [
-                "txid" => $txid,
-                "block" => $block,
-                "event_name" => $event_name,
-                "from_address" => $from_address,
-                "to_address" => $to_address,
-                "value" => bcdiv(strval($value), bcpow("10", $decimal), intval($decimal)),
-                "meta" => $log,
-            ];
-        }
-
-        $ret["list"] = $list;
-
-        $ret["end_block"] = $end_block;
-
-        return $ret;
-    }
-
     public static function hexdec2dec(string $hexValue = "", int $decimalPlaces = 18)
     {
         list($bnq, $bnr) = Utils::fromWei(Utils::toBn($hexValue), "ether");
         return $bnq->toString() . "." . str_pad($bnr->toString(), $decimalPlaces, "0", STR_PAD_LEFT);
     }
 
-    public function getDecimals(string $rpc_url, string $token_address)
+    public function getDecimals(string $rpcUrl, string $tokenAddress)
     {
-        $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpc_url, 2)));
+        $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpcUrl, 2)));
         $contract = new Contract($web3->provider, $this->abi());
 
         $decimal = "0";
-        $contract->at($token_address)->call("decimals", function ($err, $data) use (&$decimal) {
+        $contract->at($tokenAddress)->call("decimals", function ($err, $data) use (&$decimal) {
             if ($err) {
                 Log::error("getDecimals err", ["err" => $err]);
             } else {
@@ -134,9 +67,9 @@ final class EvmLogic
         return '[{"inputs":[],"payable":false,"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"spender","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},{"constant":true,"inputs":[],"name":"_decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"_name","outputs":[{"internalType":"string","name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"_symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"decimals","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"subtractedValue","type":"uint256"}],"name":"decreaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"getOwner","outputs":[{"internalType":"address","name":"","type":"address"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"addedValue","type":"uint256"}],"name":"increaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"mint","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[],"name":"renounceOwnership","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transferFrom","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"}]';
     }
 
-    public static function getTransactionReceipt(string $rpc_url, string $hash)
+    public static function getTransactionReceipt(string $rpcUrl, string $hash)
     {
-        $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpc_url, 2)));
+        $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpcUrl, 2)));
         $ret = [];
         $web3->eth->getTransactionReceipt($hash, function ($err, $data) use (&$ret) {
             if (!$data) {
@@ -167,20 +100,20 @@ final class EvmLogic
         ];
     }
 
-    public function transfer($rpc_url, $chain_id, $amount, $token_address, $from_address, $private_key, $to_address)
+    public function transfer($rpcUrl, $chainId, $amount, $tokenAddress, $fromAddress, $privateKey, $toAddress)
     {
         $success = 0;
         $transactionHash = "";
 
         //check it is main coin or not
-        $main_coin = $token_address ? false : true;
+        $mainCoin = $tokenAddress ? false : true;
         $amount = Utils::toHex($amount, true);
-        $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpc_url, 2)));
+        $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpcUrl, 2)));
         $eth = $web3->eth;
         $contract = new Contract($web3->provider, $this->abi());
         $nonce = 0;
 
-        $web3->eth->getTransactionCount($from_address, "pending", function ($err, $result) use (&$nonce, &$success) {
+        $web3->eth->getTransactionCount($fromAddress, "pending", function ($err, $result) use (&$nonce, &$success) {
             if ($err) {
                 Log::error("transaction count error: " . $err->getMessage());
             } else {
@@ -189,34 +122,34 @@ final class EvmLogic
             }
         });
 
-        $gas_price = 0;
-        $eth->gasPrice(function ($err, $resp) use (&$gas_price, &$success) {
+        $gasPrice = 0;
+        $eth->gasPrice(function ($err, $resp) use (&$gasPrice, &$success) {
             if ($err) {
                 Log::error("gas price error: " . $err->getMessage());
             } else {
-                $gas_price = gmp_intval($resp->value);
+                $gasPrice = gmp_intval($resp->value);
                 $success++;
             }
         });
 
         $params = [
             "nonce" => $nonce,
-            "from" => $from_address,
-            "to" => $main_coin ? $to_address : $token_address,
+            "from" => $fromAddress,
+            "to" => $mainCoin ? $toAddress : $tokenAddress,
         ];
 
-        if (!$main_coin) {
-            $data = $contract->at($token_address)->getData("transfer", $to_address, $amount);
+        if (!$mainCoin) {
+            $data = $contract->at($tokenAddress)->getData("transfer", $toAddress, $amount);
             $params["data"] = $data;
         }
 
         $es = null;
-        if ($main_coin) {
+        if ($mainCoin) {
             $es = "21000";
         } else {
             $contract
-                ->at($token_address)
-                ->estimateGas("transfer", $to_address, $amount, $params, function ($err, $resp) use (&$es, &$success) {
+                ->at($tokenAddress)
+                ->estimateGas("transfer", $toAddress, $amount, $params, function ($err, $resp) use (&$es, &$success) {
                     if ($err) {
                         Log::error("estimate gas error: " . $err->getMessage());
                     } else {
@@ -233,21 +166,21 @@ final class EvmLogic
 
             $nonce = Utils::toHex($nonce, true);
             $gas = Utils::toHex(intval($gas_price * $multiply), true);
-            $gas_limit = Utils::toHex($es, true);
+            $gasLimit = Utils::toHex($es, true);
 
-            if ($main_coin) {
-                $to = $to_address;
+            if ($mainCoin) {
+                $to = $toAddress;
                 $value = $amount;
                 $data = "";
             } else {
-                $to = $token_address;
+                $to = $tokenAddress;
                 $value = Utils::toHex(0, true);
                 $data = sprintf("0x%s", $data);
             }
 
-            $transaction = new Transaction($nonce, $gas, $gas_limit, $to, $value, $data);
+            $transaction = new Transaction($nonce, $gas, $gasLimit, $to, $value, $data);
 
-            $signedTransaction = "0x" . $transaction->getRaw($private_key, $chain_id);
+            $signedTransaction = "0x" . $transaction->getRaw($privateKey, $chainId);
 
             // send signed transaction
             $web3->eth->sendRawTransaction($signedTransaction, function ($err, $data) use (&$transactionHash) {
@@ -265,28 +198,23 @@ final class EvmLogic
     public static function recordReader(
         string $tokenAddress = "",
         string $rpcUrl = "",
-        string $fromAddress = null,
-        string $toAddress = null,
         int $startBlock = 0,
-        int $endBlock = 0
+        int $endBlock = 0,
+        string $action = "",
+        string $fromAddress = "",
+        string $toAddress = ""
     ) {
-        $depositRecords = [];
+        $recordArray = [];
         $success = 0;
 
         try {
-            $decimal = 18;
-            $web3 = new Web3($rpcUrl);
-            $action = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"; // transfer
+            $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpcUrl, 2)));
 
-            $topics = [$action];
-
-            $targetFrom = $fromAddress == null
-                ? null
-                : "0x000000000000000000000000" . str_replace("0x", "", $fromAddress);
-            $targetTo = $toAddress == null
-                ? null
-                : "0x000000000000000000000000" . str_replace("0x", "", $toAddress);
-            $topics = [$action, $targetFrom, $targetTo];
+            // topic - works like a filter
+            $action = !empty($action) ? $action : null;
+            $fromAddress = !empty($fromAddress) ? "0x000000000000000000000000" . str_replace("0x", "", $fromAddress) : null;
+            $toAddress = !empty($toAddress) ? "0x000000000000000000000000" . str_replace("0x", "", $toAddress) : null;
+            $topics = [$action, $fromAddress, $toAddress];
 
             $params = [
                 "fromBlock" => "0x" . dechex($startBlock),
@@ -295,7 +223,7 @@ final class EvmLogic
                 "topics" => $topics,
             ];
 
-            $filter = 0;
+            $filter = null;
             $web3->eth->newFilter($params, function ($err, $data) use (&$filter, &$success) {
                 if ($err) {
                     Log::error("web3 eth newFilter: " . $err);
@@ -315,24 +243,24 @@ final class EvmLogic
                 }
             });
 
-            foreach ($rawRecords as $deposit) {
-                $value = self::hexdec2dec($deposit->data, $decimal);
+            foreach ($rawRecords as $record) {
+                $value = self::hexdec2dec($record->data);
 
-                $depositRecords[] = [
-                    "txid" => $deposit->transactionHash,
-                    "block" => hexdec($deposit->blockNumber),
-                    "event_name" => $deposit->topics[0],
-                    "from_address" => strtolower(str_replace("0x000000000000000000000000", "0x", $deposit->topics[1])),
-                    "to_address" => strtolower(str_replace("0x000000000000000000000000", "0x", $deposit->topics[2])),
+                $recordArray[] = [
+                    "txid" => $record->transactionHash,
+                    "block" => hexdec($record->blockNumber),
+                    "event_name" => $record->topics[0],
+                    "from_address" => strtolower(str_replace("0x000000000000000000000000", "0x", $record->topics[1])),
+                    "to_address" => strtolower(str_replace("0x000000000000000000000000", "0x", $record->topics[2])),
                     "value" => $value,
-                    "meta" => $deposit,
+                    "meta" => $record,
                 ];
             }
         } catch (\Exception $e) {
         }
 
         if ($success == 2) {
-            return json_encode($depositRecords);
+            return json_encode($recordArray);
         } else {
             return false;
         }
