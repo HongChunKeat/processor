@@ -12,4 +12,5 @@ use WebmanTech\CrontabTask\Schedule;
 
 return (new Schedule())
     ->addTask("deposit_reader", "*/30 * * * * *", \app\crontab\deposit\Reader::class)
+    ->addTask("nft_reader", "*/30 * * * * *", \app\crontab\nft\Reader::class)
     ->buildProcesses();

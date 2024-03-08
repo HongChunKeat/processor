@@ -8,7 +8,9 @@ use Webman\RedisQueue\Consumer;
 # database & logic
 use app\model\database\AccountUserModel;
 use app\model\database\SettingDepositModel;
+use app\model\database\SettingNftModel;
 use app\model\database\UserDepositModel;
+use app\model\database\UserNftModel;
 use app\model\logic\EvmLogic;
 use app\model\logic\HelperLogic;
 use app\model\logic\SettingLogic;
@@ -68,12 +70,12 @@ class ReaderTransaction implements Consumer
                 $settingNetwork["rpc_url"],
                 ($startBlock < $endBlock) ? $startBlock + 1 : $startBlock,
                 $endBlock,
-                "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef", // transfer
+                "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
                 "",
                 $settingDeposit["address"]
             );
 
-            echo $startBlock . "|" . $endBlock . "|" . $recordReaders . "\n";
+            // echo $startBlock . "|" . $endBlock . "|" . $recordReaders . "\n";
 
             // if end block and record reader no error
             if ($endBlock && $recordReaders) {
@@ -100,7 +102,7 @@ class ReaderTransaction implements Consumer
 
                             # [create query]
                             $res = UserDepositModel::create([
-                                "sn" => HelperLogic::randomCode(),
+                                "sn" => HelperLogic::generateUniqueSN("user_deposit"),
                                 "uid" => $user["id"],
                                 "amount" => $recordList->value,
                                 "status" => $success["id"],
@@ -136,5 +138,84 @@ class ReaderTransaction implements Consumer
 
     private function nft()
     {
+        $settingNfts = SettingNftModel::where("is_active", 1)->get();
+
+        foreach ($settingNfts as $settingNft) {
+            // Get setting network info
+            $settingNetwork = SettingLogic::get("blockchainNetwork", ["id" => $settingNft["network"]]);
+            if (!$settingNetwork || empty($settingNetwork["rpc_url"])) {
+                continue;
+            }
+
+            // Get contract address latest block & db latest block
+            $endBlock = EvmLogic::getBlockNumber($settingNetwork["rpc_url"]);
+
+            $startBlock = $settingNft["latest_block"];
+
+            // if start block is 0 then push it to front
+            if ($startBlock == 0) {
+                $startBlock = $endBlock - 1000;
+            }
+
+            // If difference block more than 30, then $endBlock = $startBlock + 30
+            $differenceBlock = $endBlock - $startBlock;
+            if ($differenceBlock > 30) {
+                $endBlock = $startBlock + 30;
+            }
+
+            // Retrieve records from the contract address and network
+            // if nft - from is 0x0000000000000000000000000000000000000000, to is user
+            $recordReaders = EvmLogic::recordReader(
+                $settingNft["token_address"],
+                $settingNetwork["rpc_url"],
+                ($startBlock < $endBlock) ? $startBlock + 1 : $startBlock,
+                $endBlock,
+                "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                "0x0000000000000000000000000000000000000000"
+            );
+
+            // echo $startBlock . "|" . $endBlock . "|" . $recordReaders . "\n";
+
+            // if end block and record reader no error
+            if ($endBlock && $recordReaders) {
+                // Decode JSON string to object
+                $recordLists = json_decode($recordReaders);
+
+                if ($recordLists) {
+                    foreach ($recordLists as $recordList) {
+                        // Check if the user exists based on the 'to_address'
+                        $user = AccountUserModel::where(Db::raw("LOWER(web3_address)"), strtolower($recordList->to_address))
+                            ->where("status", "active")
+                            ->first();
+
+                        // Check if the user deposit exists based on the txid and log index
+                        $userNft = UserNftModel::where(["txid" => $recordList->txid, "log_index" => $recordList->meta->logIndex])->first();
+
+                        // if user in account_user & txid and log index not exist in user_nft
+                        if ($user && !$userNft) {
+                            $success = SettingLogic::get("operator", ["code" => "success"]);
+
+                            # [create query]
+                            UserNftModel::create([
+                                "sn" => HelperLogic::generateUniqueSN("user_nft"),
+                                "uid" => $user["id"],
+                                "amount" => $recordList->value,
+                                "status" => $success["id"],
+                                "txid" => $recordList->txid,
+                                "log_index" => $recordList->meta->logIndex,
+                                "from_address" => $recordList->from_address,
+                                "to_address" => $user["web3_address"],
+                                "network" => $settingNetwork["id"],
+                                "token_address" => $settingNft["token_address"],
+                                "completed_at" => date("Y-m-d H:i:s"),
+                            ]);
+                        }
+                    }
+                }
+
+                // Update latest block
+                SettingNftModel::where("id", $settingNft["id"])->update(["latest_block" => $endBlock]);
+            }
+        }
     }
 }
