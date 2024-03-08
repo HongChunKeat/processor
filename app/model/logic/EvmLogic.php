@@ -204,7 +204,9 @@ final class EvmLogic
         string $fromAddress = "",
         string $toAddress = ""
     ) {
+        $filter = null;
         $recordArray = [];
+        $rawRecords = [];
         $success = 0;
 
         try {
@@ -223,7 +225,6 @@ final class EvmLogic
                 "topics" => $topics,
             ];
 
-            $filter = null;
             $web3->eth->newFilter($params, function ($err, $data) use (&$filter, &$success) {
                 if ($err) {
                     Log::error("web3 eth newFilter: " . $err);
@@ -233,28 +234,32 @@ final class EvmLogic
                 }
             });
 
-            $rawRecords = [];
-            $web3->eth->getFilterLogs($filter, function ($err, $data) use (&$rawRecords, &$success) {
-                if ($err) {
-                    Log::error("web3 eth getFilterLogs: " . $err);
-                } else {
-                    $rawRecords = $data;
-                    $success++;
+            if (!empty($filter)) {
+                $web3->eth->getFilterLogs($filter, function ($err, $data) use (&$rawRecords, &$success) {
+                    if ($err) {
+                        // always trigger error due to rpc problem so commented out
+                        // Log::error("web3 eth getFilterLogs: " . $err);
+                    } else {
+                        $rawRecords = $data;
+                        $success++;
+                    }
+                });
+            }
+
+            if (count($rawRecords) > 0) {
+                foreach ($rawRecords as $record) {
+                    $value = self::hexdec2dec($record->data);
+
+                    $recordArray[] = [
+                        "txid" => $record->transactionHash,
+                        "block" => hexdec($record->blockNumber),
+                        "event_name" => $record->topics[0],
+                        "from_address" => strtolower(str_replace("0x000000000000000000000000", "0x", $record->topics[1])),
+                        "to_address" => strtolower(str_replace("0x000000000000000000000000", "0x", $record->topics[2])),
+                        "value" => $value,
+                        "meta" => $record,
+                    ];
                 }
-            });
-
-            foreach ($rawRecords as $record) {
-                $value = self::hexdec2dec($record->data);
-
-                $recordArray[] = [
-                    "txid" => $record->transactionHash,
-                    "block" => hexdec($record->blockNumber),
-                    "event_name" => $record->topics[0],
-                    "from_address" => strtolower(str_replace("0x000000000000000000000000", "0x", $record->topics[1])),
-                    "to_address" => strtolower(str_replace("0x000000000000000000000000", "0x", $record->topics[2])),
-                    "value" => $value,
-                    "meta" => $record,
-                ];
             }
         } catch (\Exception $e) {
         }
