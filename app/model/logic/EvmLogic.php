@@ -24,7 +24,7 @@ final class EvmLogic
 
         $block = 0;
         $web3->eth->blockNumber(function ($err, $data) use (&$block, &$success) {
-            if ($err) {
+            if ($err !== null) {
                 Log::error("blockNumber err", ["err" => $err]);
             } else {
                 $block = (int) $data->toString();
@@ -52,7 +52,7 @@ final class EvmLogic
 
         $decimal = "0";
         $contract->at($tokenAddress)->call("decimals", function ($err, $data) use (&$decimal) {
-            if ($err) {
+            if ($err !== null) {
                 Log::error("getDecimals err", ["err" => $err]);
             } else {
                 $decimal = $data[0]->toString();
@@ -72,7 +72,7 @@ final class EvmLogic
         $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpcUrl, 2)));
         $ret = [];
         $web3->eth->getTransactionReceipt($hash, function ($err, $data) use (&$ret) {
-            if (!$data) {
+            if ($err !== null) {
                 Log::error("getTransactionReceipt err", ["err" => $err]);
             } else {
                 $ret = json_decode(json_encode($data, 1), true);
@@ -114,7 +114,7 @@ final class EvmLogic
         $nonce = 0;
 
         $web3->eth->getTransactionCount($fromAddress, "pending", function ($err, $result) use (&$nonce, &$success) {
-            if ($err) {
+            if ($err !== null) {
                 Log::error("transaction count error: " . $err->getMessage());
             } else {
                 $nonce = gmp_intval($result->value);
@@ -124,7 +124,7 @@ final class EvmLogic
 
         $gasPrice = 0;
         $eth->gasPrice(function ($err, $resp) use (&$gasPrice, &$success) {
-            if ($err) {
+            if ($err !== null) {
                 Log::error("gas price error: " . $err->getMessage());
             } else {
                 $gasPrice = gmp_intval($resp->value);
@@ -150,7 +150,7 @@ final class EvmLogic
             $contract
                 ->at($tokenAddress)
                 ->estimateGas("transfer", $toAddress, $amount, $params, function ($err, $resp) use (&$es, &$success) {
-                    if ($err) {
+                    if ($err !== null) {
                         Log::error("estimate gas error: " . $err->getMessage());
                     } else {
                         $es = $resp->toString();
@@ -184,7 +184,7 @@ final class EvmLogic
 
             // send signed transaction
             $web3->eth->sendRawTransaction($signedTransaction, function ($err, $data) use (&$transactionHash) {
-                if ($err) {
+                if ($err !== null) {
                     Log::error("send raw transaction error: " . $err->getMessage());
                 } else {
                     $transactionHash = $data;
@@ -229,7 +229,7 @@ final class EvmLogic
             ];
 
             $web3->eth->newFilter($params, function ($err, $data) use (&$filter, &$success) {
-                if ($err) {
+                if ($err !== null) {
                     Log::error("web3 eth newFilter: " . $err);
                 } else {
                     $filter = $data;
@@ -239,7 +239,7 @@ final class EvmLogic
 
             if (!empty($filter)) {
                 $web3->eth->getFilterLogs($filter, function ($err, $data) use (&$rawRecords, &$success) {
-                    if ($err) {
+                    if ($err !== null) {
                         // always trigger error due to rpc problem so commented out
                         // Log::error("web3 eth getFilterLogs: " . $err);
                     } else {
