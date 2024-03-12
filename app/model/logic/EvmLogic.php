@@ -17,9 +17,59 @@ use kornrunner\Keccak;
 
 final class EvmLogic
 {
+    public static function abi()
+    {
+        return '[{"inputs":[],"payable":false,"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"spender","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},{"constant":true,"inputs":[],"name":"_decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"_name","outputs":[{"internalType":"string","name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"_symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"decimals","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"subtractedValue","type":"uint256"}],"name":"decreaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"getOwner","outputs":[{"internalType":"address","name":"","type":"address"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"addedValue","type":"uint256"}],"name":"increaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"mint","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[],"name":"renounceOwnership","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transferFrom","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"}]';
+    }
+
+    # convert hex decimal value to decimal
+    public static function hexdecimalToDecimal(string $hexValue = "", int $decimalPlaces = 18)
+    {
+        list($bnq, $bnr) = Utils::fromWei(Utils::toBn($hexValue), "ether");
+        return $bnq->toString() . "." . str_pad($bnr->toString(), $decimalPlaces, "0", STR_PAD_LEFT);
+    }
+
+    # get decimal of the token address / contract
+    public static function getDecimals(string $rpcUrl, string $tokenAddress)
+    {
+        $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpcUrl, 2)));
+        $contract = new Contract($web3->provider, self::abi());
+
+        $decimal = 0;
+        $contract->at($tokenAddress)->call("decimals", function ($err, $data) use (&$decimal) {
+            if ($err !== null) {
+                Log::error("getDecimals err", ["err" => $err]);
+            } else {
+                $decimal = (int) $data[0]->toString();
+            }
+        });
+
+        return $decimal;
+    }
+
+    # get balance of address in that contract
+    # if nft:   ERC-721 (count number of nft)
+    #           ERC-1155 (count number of nft but didnt filter by type)
+    public static function getBalance(string $rpcUrl, string $address, string $tokenAddress)
+    {
+        $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpcUrl, 2)));
+        $contract = new Contract($web3->provider, self::abi());
+
+        $balance = 0;
+        $contract->at($tokenAddress)->call("balanceOf", $address, function ($err, $data) use (&$balance) {
+            if ($err !== null) {
+                Log::error("getBalance err", ["err" => $err]);
+            } else {
+                $balance = gmp_intval($data[0]->value);
+            }
+        });
+
+        return $balance;
+    }
+
+    # get current block number of the rpc
     public static function getBlockNumber(string $rpcUrl)
     {
-        $success = 0;
         $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpcUrl, 2)));
 
         $block = 0;
@@ -32,46 +82,15 @@ final class EvmLogic
             }
         });
 
-        if ($success == 1) {
-            return $block;
-        } else {
-            return false;
-        }
+        return $block;
     }
 
-    public static function hexdec2dec(string $hexValue = "", int $decimalPlaces = 18)
-    {
-        list($bnq, $bnr) = Utils::fromWei(Utils::toBn($hexValue), "ether");
-        return $bnq->toString() . "." . str_pad($bnr->toString(), $decimalPlaces, "0", STR_PAD_LEFT);
-    }
-
-    public function getDecimals(string $rpcUrl, string $tokenAddress)
-    {
-        $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpcUrl, 2)));
-        $contract = new Contract($web3->provider, $this->abi());
-
-        $decimal = "0";
-        $contract->at($tokenAddress)->call("decimals", function ($err, $data) use (&$decimal) {
-            if ($err !== null) {
-                Log::error("getDecimals err", ["err" => $err]);
-            } else {
-                $decimal = $data[0]->toString();
-            }
-        });
-
-        return $decimal;
-    }
-
-    public function abi()
-    {
-        return '[{"inputs":[],"payable":false,"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"spender","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},{"constant":true,"inputs":[],"name":"_decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"_name","outputs":[{"internalType":"string","name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"_symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"decimals","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"subtractedValue","type":"uint256"}],"name":"decreaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"getOwner","outputs":[{"internalType":"address","name":"","type":"address"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"addedValue","type":"uint256"}],"name":"increaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"mint","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[],"name":"renounceOwnership","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transferFrom","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"}]';
-    }
-
-    public static function getTransactionReceipt(string $rpcUrl, string $hash)
+    # get transaction info of the txid
+    public static function getTransactionReceipt(string $rpcUrl, string $txid)
     {
         $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpcUrl, 2)));
         $ret = [];
-        $web3->eth->getTransactionReceipt($hash, function ($err, $data) use (&$ret) {
+        $web3->eth->getTransactionReceipt($txid, function ($err, $data) use (&$ret) {
             if ($err !== null) {
                 Log::error("getTransactionReceipt err", ["err" => $err]);
             } else {
@@ -81,10 +100,11 @@ final class EvmLogic
         return $ret;
     }
 
+    # decode transaction info
     public static function decodeTransaction($receipt)
     {
         $status = hexdec($receipt["status"]); // 1:success
-        $amount = EvmLogic::hexdec2dec($receipt["logs"][0]["data"]);
+        $amount = EvmLogic::hexdecimalToDecimal($receipt["logs"][0]["data"]);
         $tokenAddress = $receipt["logs"][0]["address"];
         $fromAddress = strtolower(str_replace("0x000000000000000000000000", "0x", $receipt["logs"][0]["topics"][1]));
         $toAddress = strtolower(str_replace("0x000000000000000000000000", "0x", $receipt["logs"][0]["topics"][2]));
@@ -100,7 +120,8 @@ final class EvmLogic
         ];
     }
 
-    public function transfer($rpcUrl, $chainId, $amount, $tokenAddress, $fromAddress, $privateKey, $toAddress)
+    # send to chain and return txid (withdraw)
+    public static function transfer($rpcUrl, $chainId, $amount, $tokenAddress, $fromAddress, $privateKey, $toAddress)
     {
         $success = 0;
         $transactionHash = "";
@@ -110,7 +131,7 @@ final class EvmLogic
         $amount = Utils::toHex($amount, true);
         $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpcUrl, 2)));
         $eth = $web3->eth;
-        $contract = new Contract($web3->provider, $this->abi());
+        $contract = new Contract($web3->provider, self::abi());
         $nonce = 0;
 
         $web3->eth->getTransactionCount($fromAddress, "pending", function ($err, $result) use (&$nonce, &$success) {
@@ -195,6 +216,7 @@ final class EvmLogic
         return $transactionHash;
     }
 
+    # processor transaction reader
     public static function recordReader(
         string $tokenAddress = "",
         string $rpcUrl = "",
@@ -251,7 +273,7 @@ final class EvmLogic
 
             if (count($rawRecords) > 0) {
                 foreach ($rawRecords as $record) {
-                    $value = self::hexdec2dec($record->data);
+                    $value = self::hexdecimalToDecimal($record->data);
 
                     $recordArray[] = [
                         "txid" => $record->transactionHash,
@@ -274,17 +296,7 @@ final class EvmLogic
         }
     }
 
-    public static function getHash(string $message)
-    {
-        // Prefix the message according to Ethereum Signed Message format
-        $signMessage = "\x19Ethereum Signed Message:\n" . strlen($message) . strtolower($message);
-
-        // Hash the prefixed message using Keccak-256 hash function
-        $hash = "0x" . Keccak::hash($signMessage, 256);
-
-        return $hash;
-    }
-
+    # nft sign message
     public static function signMessage(string $message)
     {
         try {
@@ -299,7 +311,7 @@ final class EvmLogic
 
                     // Validate the private key format
                     if (self::isValidPrivateKeyFormat($privateKey)) {
-                        $hash = self::getHash($message);
+                        $hash = self::hashMessage($message);
 
                         // Instantiate Elliptic Curve library with 'secp256k1' curve
                         $ec = new EC('secp256k1');
@@ -327,6 +339,19 @@ final class EvmLogic
         }
     }
 
+    # hash the message
+    private static function hashMessage(string $message)
+    {
+        // Prefix the message according to Ethereum Signed Message format
+        $signMessage = "\x19Ethereum Signed Message:\n" . strlen($message) . strtolower($message);
+
+        // Hash the prefixed message using Keccak-256 hash function
+        $hash = "0x" . Keccak::hash($signMessage, 256);
+
+        return $hash;
+    }
+
+    # check private key validity
     private static function isValidPrivateKeyFormat($privateKey)
     {
         $response = false;

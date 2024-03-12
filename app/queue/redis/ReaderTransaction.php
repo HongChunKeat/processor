@@ -78,7 +78,7 @@ class ReaderTransaction implements Consumer
             // echo $startBlock . "|" . $endBlock . "|" . $recordReaders . "\n";
 
             // if end block and record reader no error
-            if ($endBlock && $recordReaders) {
+            if ($endBlock > 0 && $recordReaders) {
                 // Decode JSON string to object
                 $recordLists = json_decode($recordReaders);
 
@@ -177,7 +177,7 @@ class ReaderTransaction implements Consumer
             // echo $startBlock . "|" . $endBlock . "|" . $recordReaders . "\n";
 
             // if end block and record reader no error
-            if ($endBlock && $recordReaders) {
+            if ($endBlock > 0 && $recordReaders) {
                 // Decode JSON string to object
                 $recordLists = json_decode($recordReaders);
 
