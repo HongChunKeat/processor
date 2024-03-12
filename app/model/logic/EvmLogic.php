@@ -89,6 +89,7 @@ final class EvmLogic
     public static function getTransactionReceipt(string $rpcUrl, string $txid)
     {
         $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpcUrl, 2)));
+
         $ret = [];
         $web3->eth->getTransactionReceipt($txid, function ($err, $data) use (&$ret) {
             if ($err !== null) {
@@ -97,6 +98,7 @@ final class EvmLogic
                 $ret = json_decode(json_encode($data, 1), true);
             }
         });
+
         return $ret;
     }
 
