@@ -47,20 +47,25 @@ final class EvmLogic
         return $decimal;
     }
 
-    # get balance of address in that contract
-    # if nft:   ERC-721 (count number of nft)
-    #           ERC-1155 (count number of nft but didnt filter by type)
-    public static function getBalance(string $rpcUrl, string $address, string $tokenAddress)
+    # get balance of address in that contract (for token and ERC-721 nft only)
+    # if token: count balance
+    # if nft: ERC-721 (count number of nft)
+    public static function getBalance(string $type, string $rpcUrl, string $tokenAddress, string $address)
     {
         $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpcUrl, 2)));
         $contract = new Contract($web3->provider, self::abi());
 
         $balance = 0;
-        $contract->at($tokenAddress)->call("balanceOf", $address, function ($err, $data) use (&$balance) {
+        $contract->at($tokenAddress)->call("balanceOf", $address, function ($err, $data) use (&$type, &$balance) {
             if ($err !== null) {
                 Log::error("getBalance err", ["err" => $err]);
             } else {
-                $balance = gmp_intval($data[0]->value);
+                $value = gmp_strval($data[0]->value);
+                if ($type == "token") {
+                    $balance = self::hexdecimalToDecimal($value);
+                } else if ($type == "nft") {
+                    $balance = $value;
+                }
             }
         });
 
