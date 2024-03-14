@@ -309,7 +309,7 @@ final class EvmLogic
         try {
             $signature = false;
 
-            $contractId = SettingLogic::get("general", ["code" => "nft_contract_id", "category" => "onboarding"]);
+            $contractId = SettingLogic::get("general", ["category" => "onboarding", "code" => "nft_contract_id"]);
             if ($contractId) {
 
                 $contract = SettingLogic::get("nft", ["id" => $contractId["value"]]);
