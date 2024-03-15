@@ -11,6 +11,7 @@ use app\model\database\SettingDepositModel;
 use app\model\database\SettingNftModel;
 use app\model\database\UserDepositModel;
 use app\model\database\UserNftModel;
+use app\model\database\UserSeedModel;
 use app\model\logic\EvmLogic;
 use app\model\logic\HelperLogic;
 use app\model\logic\SettingLogic;
@@ -164,14 +165,13 @@ class ReaderTransaction implements Consumer
             }
 
             // Retrieve records from the contract address and network
-            // if nft - from is 0x0000000000000000000000000000000000000000, to is user
+            // if mint nft - from is 0x0000000000000000000000000000000000000000, to is user
             $recordReaders = EvmLogic::recordReader(
                 $settingNft["token_address"],
                 $settingNetwork["rpc_url"],
                 ($startBlock < $endBlock) ? $startBlock + 1 : $startBlock,
                 $endBlock,
-                "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
-                "0x0000000000000000000000000000000000000000"
+                "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
             );
 
             // echo $startBlock . "|" . $endBlock . "|" . $recordReaders . "\n";
@@ -183,32 +183,28 @@ class ReaderTransaction implements Consumer
 
                 if ($recordLists) {
                     foreach ($recordLists as $recordList) {
-                        // Check if the user exists based on the 'to_address'
-                        $user = AccountUserModel::where(Db::raw("LOWER(web3_address)"), strtolower($recordList->to_address))
-                            ->where("status", "active")
-                            ->first();
+                        // seed check transfer between user only
+                        // for the purpose of if the to_user seed is claimable 0 then they got a new seed then we need to make it claimable = 1 and claimed_at = now
+                        if ($settingNft["name"] == "seed") {
+                            $fromUser = AccountUserModel::where(Db::raw("LOWER(web3_address)"), strtolower($recordList->from_address))
+                                ->where("status", "active")
+                                ->first();
 
-                        // Check if the user deposit exists based on the txid and log index
-                        $userNft = UserNftModel::where(["txid" => $recordList->txid, "log_index" => $recordList->meta->logIndex])->first();
+                            $toUser = AccountUserModel::where(Db::raw("LOWER(web3_address)"), strtolower($recordList->to_address))
+                                ->where("status", "active")
+                                ->first();
 
-                        // if user in account_user & txid and log index not exist in user_nft
-                        if ($user && !$userNft) {
-                            $success = SettingLogic::get("operator", ["code" => "success"]);
-
-                            # [create query]
-                            UserNftModel::create([
-                                "sn" => HelperLogic::generateUniqueSN("user_nft"),
-                                "uid" => $user["id"],
-                                "amount" => $recordList->value,
-                                "status" => $success["id"],
-                                "txid" => $recordList->txid,
-                                "log_index" => $recordList->meta->logIndex,
-                                "from_address" => $recordList->from_address,
-                                "to_address" => $user["web3_address"],
-                                "network" => $settingNetwork["id"],
-                                "token_address" => $settingNft["token_address"],
-                                "completed_at" => date("Y-m-d H:i:s"),
-                            ]);
+                            // if from user and to user exist in platform then proceed
+                            if ($fromUser && $toUser) {
+                                //check if to_user seed is claimable 0, if yes then update claimed at = now and claimable = 1
+                                $seed = UserSeedModel::where(["uid" => $toUser["id"], "claimable" => 0])->first();
+                                if ($seed) {
+                                    UserSeedModel::where("id", $seed["id"])->update([
+                                        "claimed_at" => date("Y-m-d H:i:s"),
+                                        "claimable" => 1
+                                    ]);
+                                }
+                            }
                         }
                     }
                 }

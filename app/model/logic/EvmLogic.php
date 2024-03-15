@@ -248,7 +248,7 @@ final class EvmLogic
             // topics - act as a filter parameter
             // transfer (ERC-721 NFTs & common type of transfer) - 0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef
             // single transfer (ERC-1155 NFTs) = 0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62
-            // if nft - from is 0x0000000000000000000000000000000000000000, to is user
+            // if mint nft - from is 0x0000000000000000000000000000000000000000, to is user
             $action = !empty($action) ? $action : null;
             $fromAddress = !empty($fromAddress) ? "0x000000000000000000000000" . str_replace("0x", "", $fromAddress) : null;
             $toAddress = !empty($toAddress) ? "0x000000000000000000000000" . str_replace("0x", "", $toAddress) : null;
