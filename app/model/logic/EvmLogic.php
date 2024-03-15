@@ -110,7 +110,7 @@ final class EvmLogic
     # decode transaction info
     public static function decodeTransaction($receipt, $logIndex)
     {
-        $amount = EvmLogic::hexdecimalToDecimal($receipt["logs"][$logIndex]["data"]);
+        $amount = self::hexdecimalToDecimal($receipt["logs"][$logIndex]["data"]);
         $tokenAddress = $receipt["logs"][$logIndex]["address"];
         $action = $receipt["logs"][$logIndex]["topics"][0];
         $fromAddress = !empty($receipt["logs"][$logIndex]["topics"][1])
