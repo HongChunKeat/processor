@@ -108,19 +108,23 @@ final class EvmLogic
     }
 
     # decode transaction info
-    public static function decodeTransaction($receipt)
+    public static function decodeTransaction($receipt, $logIndex)
     {
-        $status = hexdec($receipt["status"]); // 1:success
-        $amount = EvmLogic::hexdecimalToDecimal($receipt["logs"][0]["data"]);
-        $tokenAddress = $receipt["logs"][0]["address"];
-        $fromAddress = strtolower(str_replace("0x000000000000000000000000", "0x", $receipt["logs"][0]["topics"][1]));
-        $toAddress = strtolower(str_replace("0x000000000000000000000000", "0x", $receipt["logs"][0]["topics"][2]));
-        $logIndex = $receipt["logs"][0]["logIndex"];
+        $amount = EvmLogic::hexdecimalToDecimal($receipt["logs"][$logIndex]["data"]);
+        $tokenAddress = $receipt["logs"][$logIndex]["address"];
+        $action = $receipt["logs"][$logIndex]["topics"][0];
+        $fromAddress = !empty($receipt["logs"][$logIndex]["topics"][1])
+            ? strtolower(str_replace("0x000000000000000000000000", "0x", $receipt["logs"][$logIndex]["topics"][1]))
+            : null;
+        $toAddress = !empty($receipt["logs"][$logIndex]["topics"][2])
+            ? strtolower(str_replace("0x000000000000000000000000", "0x", $receipt["logs"][$logIndex]["topics"][2]))
+            : null;
+        $logIndex = $receipt["logs"][$logIndex]["logIndex"];
 
         return [
-            "status" => $status,
             "amount" => $amount,
             "tokenAddress" => $tokenAddress,
+            "action" => $action,
             "fromAddress" => $fromAddress,
             "toAddress" => $toAddress,
             "logIndex" => $logIndex,
