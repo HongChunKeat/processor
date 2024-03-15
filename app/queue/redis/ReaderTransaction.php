@@ -183,21 +183,21 @@ class ReaderTransaction implements Consumer
 
                 if ($recordLists) {
                     foreach ($recordLists as $recordList) {
-                        // seed check transfer between user only
-                        // for the purpose of if the to_user seed is claimable 0 then they got a new seed then we need to make it claimable = 1 and claimed_at = now
+                        /* 
+                            - check if the to_user seed is claimable 0 or not, if yes and they got a new seed then need to make it claimable = 1 and claimed_at = now
+                            - this function only for existing user that have seed that is claimable 0
+                            - if claimable = 1 nothing happened, because reward countdown is calculated based on the first seed they got
+                            - if user not exist nothing happened, this means that we wont auto register new user that have seed
+                        */
                         if ($settingNft["name"] == "seed") {
-                            $fromUser = AccountUserModel::where(Db::raw("LOWER(web3_address)"), strtolower($recordList->from_address))
-                                ->where("status", "active")
-                                ->first();
-
                             $toUser = AccountUserModel::where(Db::raw("LOWER(web3_address)"), strtolower($recordList->to_address))
                                 ->where("status", "active")
                                 ->first();
 
-                            // if from user and to user exist in platform then proceed
-                            if ($fromUser && $toUser) {
-                                //check if to_user seed is claimable 0, if yes then update claimed at = now and claimable = 1
+                            // if to_user exist in platform then proceed
+                            if ($toUser) {
                                 $seed = UserSeedModel::where(["uid" => $toUser["id"], "claimable" => 0])->first();
+                                // if to_user have seed that is claimable 0 then proceed
                                 if ($seed) {
                                     UserSeedModel::where("id", $seed["id"])->update([
                                         "claimed_at" => date("Y-m-d H:i:s"),
