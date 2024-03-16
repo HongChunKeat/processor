@@ -227,7 +227,15 @@ final class EvmLogic
         return $transactionHash;
     }
 
-    # processor transaction reader
+    # processor log reader
+    /*
+        topics - act as a filter parameter
+        - transfer (ERC-721 NFTs & common type of transfer) - 0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef
+        - single transfer (ERC-1155 NFTs) = 0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62
+        - if mint nft - from is 0x0000000000000000000000000000000000000000, to is user
+
+        get the transaction log not receipt so wont have status field, and only success transaction will have log, so basically the log that's fetched by this function are from transaction that's success
+    */
     public static function recordReader(
         string $tokenAddress = "",
         string $rpcUrl = "",
@@ -245,10 +253,6 @@ final class EvmLogic
         try {
             $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpcUrl, 2)));
 
-            // topics - act as a filter parameter
-            // transfer (ERC-721 NFTs & common type of transfer) - 0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef
-            // single transfer (ERC-1155 NFTs) = 0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62
-            // if mint nft - from is 0x0000000000000000000000000000000000000000, to is user
             $action = !empty($action) ? $action : null;
             $fromAddress = !empty($fromAddress) ? "0x000000000000000000000000" . str_replace("0x", "", $fromAddress) : null;
             $toAddress = !empty($toAddress) ? "0x000000000000000000000000" . str_replace("0x", "", $toAddress) : null;
@@ -284,15 +288,13 @@ final class EvmLogic
 
             if (count($rawRecords) > 0) {
                 foreach ($rawRecords as $record) {
-                    $value = self::hexdecimalToDecimal($record->data);
-
                     $recordArray[] = [
                         "txid" => $record->transactionHash,
                         "block" => hexdec($record->blockNumber),
                         "event_name" => $record->topics[0],
                         "from_address" => strtolower(str_replace("0x000000000000000000000000", "0x", $record->topics[1])),
                         "to_address" => strtolower(str_replace("0x000000000000000000000000", "0x", $record->topics[2])),
-                        "value" => $value,
+                        "value" => self::hexdecimalToDecimal($record->data),
                         "meta" => $record,
                     ];
                 }
