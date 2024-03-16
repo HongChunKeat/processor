@@ -78,12 +78,11 @@ final class EvmLogic
         $web3 = new Web3(new HttpProvider(new HttpRequestManager($rpcUrl, 2)));
 
         $block = 0;
-        $web3->eth->blockNumber(function ($err, $data) use (&$block, &$success) {
+        $web3->eth->blockNumber(function ($err, $data) use (&$block) {
             if ($err !== null) {
                 Log::error("blockNumber err", ["err" => $err]);
             } else {
                 $block = (int) $data->toString();
-                $success++;
             }
         });
 
@@ -122,11 +121,11 @@ final class EvmLogic
         $logIndex = $receipt["logs"][$logIndex]["logIndex"];
 
         return [
-            "amount" => $amount,
             "tokenAddress" => $tokenAddress,
             "action" => $action,
             "fromAddress" => $fromAddress,
             "toAddress" => $toAddress,
+            "amount" => $amount,
             "logIndex" => $logIndex,
         ];
     }
@@ -246,7 +245,7 @@ final class EvmLogic
         string $toAddress = ""
     ) {
         $filter = null;
-        $recordArray = [];
+        $recordLists = [];
         $rawRecords = [];
         $success = 0;
 
@@ -288,13 +287,14 @@ final class EvmLogic
 
             if (count($rawRecords) > 0) {
                 foreach ($rawRecords as $record) {
-                    $recordArray[] = [
+                    $recordLists[] = [
                         "txid" => $record->transactionHash,
                         "block" => hexdec($record->blockNumber),
-                        "event_name" => $record->topics[0],
-                        "from_address" => strtolower(str_replace("0x000000000000000000000000", "0x", $record->topics[1])),
-                        "to_address" => strtolower(str_replace("0x000000000000000000000000", "0x", $record->topics[2])),
-                        "value" => self::hexdecimalToDecimal($record->data),
+                        "action" => $record->topics[0],
+                        "fromAddress" => strtolower(str_replace("0x000000000000000000000000", "0x", $record->topics[1])),
+                        "toAddress" => strtolower(str_replace("0x000000000000000000000000", "0x", $record->topics[2])),
+                        "amount" => self::hexdecimalToDecimal($record->data),
+                        "logIndex" => $record->logIndex,
                         "meta" => $record,
                     ];
                 }
@@ -303,7 +303,7 @@ final class EvmLogic
         }
 
         if ($success == 2) {
-            return json_encode($recordArray);
+            return $recordLists;
         } else {
             return false;
         }

@@ -10,7 +10,6 @@ use app\model\database\AccountUserModel;
 use app\model\database\SettingDepositModel;
 use app\model\database\SettingNftModel;
 use app\model\database\UserDepositModel;
-use app\model\database\UserNftModel;
 use app\model\database\UserSeedModel;
 use app\model\logic\EvmLogic;
 use app\model\logic\HelperLogic;
@@ -44,7 +43,7 @@ class ReaderTransaction implements Consumer
 
         foreach ($settingDeposits as $settingDeposit) {
             // Get setting network info
-            $settingNetwork = SettingLogic::get("blockchainNetwork", ["id" => $settingDeposit["network"]]);
+            $settingNetwork = SettingLogic::get("blockchain_network", ["id" => $settingDeposit["network"]]);
             if (!$settingNetwork || empty($settingNetwork["rpc_url"])) {
                 continue;
             }
@@ -66,7 +65,7 @@ class ReaderTransaction implements Consumer
             }
 
             // Retrieve records from the contract address and network
-            $recordReaders = EvmLogic::recordReader(
+            $recordLists = EvmLogic::recordReader(
                 $settingDeposit["token_address"],
                 $settingNetwork["rpc_url"],
                 ($startBlock < $endBlock) ? $startBlock + 1 : $startBlock,
@@ -76,58 +75,53 @@ class ReaderTransaction implements Consumer
                 $settingDeposit["address"]
             );
 
-            // echo $startBlock . "|" . $endBlock . "|" . $recordReaders . "\n";
+            // echo $startBlock . "|" . $endBlock . "|" . json_encode($recordLists) . "\n";
 
-            // if end block and record reader no error
-            if ($endBlock > 0 && $recordReaders) {
-                // Decode JSON string to object
-                $recordLists = json_decode($recordReaders);
+            // if end block not 0 and record reader is array
+            if ($endBlock > 0 && is_array($recordLists)) {
+                foreach ($recordLists as $record) {
+                    // Check if the user exists based on the 'from_address'
+                    $user = AccountUserModel::where(Db::raw("LOWER(web3_address)"), strtolower($record["fromAddress"]))
+                        ->where("status", "active")
+                        ->first();
 
-                if ($recordLists) {
-                    foreach ($recordLists as $recordList) {
-                        // Check if the user exists based on the 'from_address'
-                        $user = AccountUserModel::where(Db::raw("LOWER(web3_address)"), strtolower($recordList->from_address))
-                            ->where("status", "active")
-                            ->first();
+                    // Check if the user deposit exists based on the txid and log index
+                    $userDeposit = UserDepositModel::where(["txid" => $record["txid"], "log_index" => $record["logIndex"]])->first();
 
-                        // Check if the user deposit exists based on the txid and log index
-                        $userDeposit = UserDepositModel::where(["txid" => $recordList->txid, "log_index" => $recordList->meta->logIndex])->first();
+                    // if user in account_user & txid and log index not exist in user_deposit
+                    if ($user && !$userDeposit) {
+                        $success = SettingLogic::get("operator", ["code" => "success"]);
+                        $topUp = SettingLogic::get("operator", ["code" => "top_up"]);
 
-                        // if user in account_user & txid and log index not exist in user_deposit
-                        if ($user && !$userDeposit) {
-                            $success = SettingLogic::get("operator", ["code" => "success"]);
-                            $topUp = SettingLogic::get("operator", ["code" => "top_up"]);
+                        // Get setting coin info
+                        $coin = SettingLogic::get("coin", ["id" => $settingDeposit["coin_id"]]);
 
-                            // Get setting coin info
-                            $coin = SettingLogic::get("coin", ["id" => $settingDeposit["coin_id"]]);
+                        # [create query]
+                        $res = UserDepositModel::create([
+                            "sn" => HelperLogic::generateUniqueSN("user_deposit"),
+                            "uid" => $user["id"],
+                            "amount" => $record["amount"],
+                            "status" => $success["id"],
+                            "coin_id" => $settingDeposit["coin_id"],
+                            "txid" => $record["txid"],
+                            "log_index" => $record["logIndex"],
+                            "from_address" => $user["web3_address"],
+                            "to_address" => $settingDeposit["address"],
+                            "network" => $settingNetwork["id"],
+                            "token_address" => $settingDeposit["token_address"],
+                            "completed_at" => date("Y-m-d H:i:s"),
+                        ]);
 
-                            # [create query]
-                            $res = UserDepositModel::create([
-                                "sn" => HelperLogic::generateUniqueSN("user_deposit"),
-                                "uid" => $user["id"],
-                                "amount" => $recordList->value,
-                                "status" => $success["id"],
-                                "coin_id" => $settingDeposit["coin_id"],
-                                "txid" => $recordList->txid,
-                                "log_index" => $recordList->meta->logIndex,
-                                "from_address" => $user["web3_address"],
-                                "to_address" => $settingDeposit["address"],
-                                "network" => $settingNetwork["id"],
-                                "token_address" => $settingDeposit["token_address"],
-                                "completed_at" => date("Y-m-d H:i:s"),
-                            ]);
-
-                            // Add Wallet
-                            UserWalletLogic::add([
-                                "type" => $topUp["id"],
-                                "uid" => $user["id"],
-                                "fromUid" => $user["id"],
-                                "toUid" => $user["id"],
-                                "distribution" => [$coin["wallet_id"] => $recordList->value],
-                                "refTable" => "user_deposit",
-                                "refId" => $res["id"],
-                            ]);
-                        }
+                        // Add Wallet
+                        UserWalletLogic::add([
+                            "type" => $topUp["id"],
+                            "uid" => $user["id"],
+                            "fromUid" => $user["id"],
+                            "toUid" => $user["id"],
+                            "distribution" => [$coin["wallet_id"] => $record["amount"]],
+                            "refTable" => "user_deposit",
+                            "refId" => $res["id"],
+                        ]);
                     }
                 }
 
@@ -143,7 +137,7 @@ class ReaderTransaction implements Consumer
 
         foreach ($settingNfts as $settingNft) {
             // Get setting network info
-            $settingNetwork = SettingLogic::get("blockchainNetwork", ["id" => $settingNft["network"]]);
+            $settingNetwork = SettingLogic::get("blockchain_network", ["id" => $settingNft["network"]]);
             if (!$settingNetwork || empty($settingNetwork["rpc_url"])) {
                 continue;
             }
@@ -166,7 +160,7 @@ class ReaderTransaction implements Consumer
 
             // Retrieve records from the contract address and network
             // if mint nft - from is 0x0000000000000000000000000000000000000000, to is user
-            $recordReaders = EvmLogic::recordReader(
+            $recordLists = EvmLogic::recordReader(
                 $settingNft["token_address"],
                 $settingNetwork["rpc_url"],
                 ($startBlock < $endBlock) ? $startBlock + 1 : $startBlock,
@@ -174,36 +168,31 @@ class ReaderTransaction implements Consumer
                 "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
             );
 
-            // echo $startBlock . "|" . $endBlock . "|" . $recordReaders . "\n";
+            // echo $startBlock . "|" . $endBlock . "|" . json_encode($recordLists) . "\n";
 
-            // if end block and record reader no error
-            if ($endBlock > 0 && $recordReaders) {
-                // Decode JSON string to object
-                $recordLists = json_decode($recordReaders);
+            // if end block not 0 and record reader is array
+            if ($endBlock > 0 && is_array($recordLists)) {
+                foreach ($recordLists as $record) {
+                    /* 
+                        - check if the to_user seed is claimable 0 or not, if yes and they got a new seed then need to make it claimable = 1 and claimed_at = now
+                        - this function only for existing user that have seed that is claimable 0
+                        - if claimable = 1 nothing happened, because reward countdown is calculated based on the first seed they got
+                        - if user not exist nothing happened, this means that we wont auto register new user that have seed
+                    */
+                    if ($settingNft["name"] == "seed") {
+                        $toUser = AccountUserModel::where(Db::raw("LOWER(web3_address)"), strtolower($record["toAddress"]))
+                            ->where("status", "active")
+                            ->first();
 
-                if ($recordLists) {
-                    foreach ($recordLists as $recordList) {
-                        /* 
-                            - check if the to_user seed is claimable 0 or not, if yes and they got a new seed then need to make it claimable = 1 and claimed_at = now
-                            - this function only for existing user that have seed that is claimable 0
-                            - if claimable = 1 nothing happened, because reward countdown is calculated based on the first seed they got
-                            - if user not exist nothing happened, this means that we wont auto register new user that have seed
-                        */
-                        if ($settingNft["name"] == "seed") {
-                            $toUser = AccountUserModel::where(Db::raw("LOWER(web3_address)"), strtolower($recordList->to_address))
-                                ->where("status", "active")
-                                ->first();
-
-                            // if to_user exist in platform then proceed
-                            if ($toUser) {
-                                $seed = UserSeedModel::where(["uid" => $toUser["id"], "claimable" => 0])->first();
-                                // if to_user have seed that is claimable 0 then proceed
-                                if ($seed) {
-                                    UserSeedModel::where("id", $seed["id"])->update([
-                                        "claimed_at" => date("Y-m-d H:i:s"),
-                                        "claimable" => 1
-                                    ]);
-                                }
+                        // if to_user exist in platform then proceed
+                        if ($toUser) {
+                            $seed = UserSeedModel::where(["uid" => $toUser["id"], "claimable" => 0])->first();
+                            // if to_user have seed that is claimable 0 then proceed
+                            if ($seed) {
+                                UserSeedModel::where("id", $seed["id"])->update([
+                                    "claimed_at" => date("Y-m-d H:i:s"),
+                                    "claimable" => 1
+                                ]);
                             }
                         }
                     }

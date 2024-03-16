@@ -35,9 +35,6 @@ class SettingLogic
             case "nft":
                 $_response = SettingNftModel::where($params);
                 break;
-            case "item":
-                $_response = SettingItemModel::where($params);
-                break;
             case "operator":
                 $_response = SettingOperatorModel::where($params);
                 break;
