@@ -68,6 +68,38 @@ class UserWalletLogic
         return $_response;
     }
 
+    public static function deduct(array $params)
+    {
+        $type = $params["type"];
+        $uid = $params["uid"];
+        $fromUid = $params["fromUid"] ?? 0;
+        $toUid = $params["toUid"] ?? 0;
+        $distribution = $params["distribution"];
+        $refTable = $params["refTable"] ?? "";
+        $refId = $params["refId"] ?? 0;
+        $total = 0;
+
+        $_response = false;
+
+        $_response = WalletTransactionModel::create([
+            "sn" => HelperLogic::generateUniqueSN("wallet_transaction"),
+            "transaction_type" => $type,
+            "uid" => $uid,
+            "from_uid" => $fromUid,
+            "to_uid" => $toUid,
+            "distribution" => json_encode($distribution),
+            "ref_table" => $refTable,
+            "ref_id" => $refId,
+            "used_at" => date("Ymd"),
+        ]);
+
+        $total = self::distribution($distribution, $_response, $uid, false);
+
+        WalletTransactionModel::where("id", $_response["id"])->update(["amount" => $total]);
+
+        return $_response;
+    }
+
     private static function distribution($distribution, $_response, $uid, $positive)
     {
         $total = 0;

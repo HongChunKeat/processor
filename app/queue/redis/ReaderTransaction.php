@@ -112,16 +112,18 @@ class ReaderTransaction implements Consumer
                             "completed_at" => date("Y-m-d H:i:s"),
                         ]);
 
-                        // Add Wallet
-                        UserWalletLogic::add([
-                            "type" => $topUp["id"],
-                            "uid" => $user["id"],
-                            "fromUid" => $user["id"],
-                            "toUid" => $user["id"],
-                            "distribution" => [$coin["wallet_id"] => $record["amount"]],
-                            "refTable" => "user_deposit",
-                            "refId" => $res["id"],
-                        ]);
+                        if ($res) {
+                            // Add Wallet
+                            UserWalletLogic::add([
+                                "type" => $topUp["id"],
+                                "uid" => $user["id"],
+                                "fromUid" => $user["id"],
+                                "toUid" => $user["id"],
+                                "distribution" => [$coin["wallet_id"] => $record["amount"]],
+                                "refTable" => "user_deposit",
+                                "refId" => $res["id"],
+                            ]);
+                        }
                     }
                 }
 
@@ -174,23 +176,32 @@ class ReaderTransaction implements Consumer
             if ($endBlock > 0 && is_array($recordLists)) {
                 foreach ($recordLists as $record) {
                     /* 
-                        - check if the to_user seed is claimable 0 or not, if yes and they got a new seed then need to make it claimable = 1 and claimed_at = now
-                        - this function only for existing user that have seed that is claimable 0
+                        a. if user not exist nothing happened, this means that we wont auto register new user that have seed
+                        b. didnt matter whether seed is from newly minted or transfer by user, as long as user receive seed then proceed
+                        c. if user no seed then create new seed (for new user that never have seed)
+                        d. if user have seed and seed is claimable 0, and user receive new seed then update claimed_at = now and claimable = 1
                         - if claimable = 1 nothing happened, because reward countdown is calculated based on the first seed they got
-                        - if user not exist nothing happened, this means that we wont auto register new user that have seed
                     */
                     if ($settingNft["name"] == "seed") {
                         $toUser = AccountUserModel::where(Db::raw("LOWER(web3_address)"), strtolower($record["toAddress"]))
                             ->where("status", "active")
                             ->first();
 
-                        // if to_user exist in platform then proceed
+                        // if to_user exist
                         if ($toUser) {
-                            $seed = UserSeedModel::where(["uid" => $toUser["id"], "claimable" => 0])->first();
-                            // if to_user have seed that is claimable 0 then proceed
+                            $seed = UserSeedModel::where("uid", $toUser["id"])->first();
                             if ($seed) {
-                                UserSeedModel::where("id", $seed["id"])->update([
-                                    "claimed_at" => date("Y-m-d H:i:s"),
+                                // if user have seed and seed is claimable 0, and user receive new seed then update
+                                if ($seed["claimable"] == 0) {
+                                    UserSeedModel::where("id", $seed["id"])->update([
+                                        "claimed_at" => date("Y-m-d H:i:s"),
+                                        "claimable" => 1
+                                    ]);
+                                }
+                            } else {
+                                // if user no seed then create new seed (for new user that never have seed)
+                                UserSeedModel::create([
+                                    "uid" => $toUser["id"],
                                     "claimable" => 1
                                 ]);
                             }
