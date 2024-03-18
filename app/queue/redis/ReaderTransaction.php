@@ -10,6 +10,7 @@ use app\model\database\AccountUserModel;
 use app\model\database\SettingDepositModel;
 use app\model\database\SettingNftModel;
 use app\model\database\UserDepositModel;
+use app\model\database\UserNftModel;
 use app\model\database\UserSeedModel;
 use app\model\logic\EvmLogic;
 use app\model\logic\HelperLogic;
@@ -176,10 +177,11 @@ class ReaderTransaction implements Consumer
             if ($endBlock > 0 && is_array($recordLists)) {
                 foreach ($recordLists as $record) {
                     /* 
-                        a. if user not exist nothing happened, this means that we wont auto register new user that have seed
-                        b. didnt matter whether seed is from newly minted or transfer by user, as long as user receive seed then proceed
-                        c. if user no seed then create new seed (for new user that never have seed)
-                        d. if user have seed and seed is claimable 0, and user receive new seed then update claimed_at = now and claimable = 1
+                        a. phase 1: only newly minted seed able to register in phase 1, so need record in user nft if got newly minted seed
+                        - recorded data = to address is lowercase, uid and ref id 0
+                        - recorded data need used in auth to find address exist or not for register
+                        - record once per address only, because mint seed is only one per address
+                        b. if user have seed and seed is claimable 0, and user receive new seed then update claimed_at = now and claimable = 1
                         - if claimable = 1 nothing happened, because reward countdown is calculated based on the first seed they got
                     */
                     if ($settingNft["name"] == "seed") {
@@ -189,21 +191,44 @@ class ReaderTransaction implements Consumer
 
                         // if to_user exist
                         if ($toUser) {
-                            $seed = UserSeedModel::where("uid", $toUser["id"])->first();
+                            $seed = UserSeedModel::where(["uid" => $toUser["id"], "claimable" => 0])->first();
                             if ($seed) {
                                 // if user have seed and seed is claimable 0, and user receive new seed then update
-                                if ($seed["claimable"] == 0) {
-                                    UserSeedModel::where("id", $seed["id"])->update([
-                                        "claimed_at" => date("Y-m-d H:i:s"),
-                                        "claimable" => 1
-                                    ]);
-                                }
-                            } else {
-                                // if user no seed then create new seed (for new user that never have seed)
-                                UserSeedModel::create([
-                                    "uid" => $toUser["id"],
+                                UserSeedModel::where("id", $seed["id"])->update([
+                                    "claimed_at" => date("Y-m-d H:i:s"),
                                     "claimable" => 1
                                 ]);
+                            }
+                        } else {
+                            // check phase and if seed is newly minted
+                            $phaseOpen = SettingLogic::get("general", ["category" => "version", "code" => "phase_1", "value" => 1]);
+                            if ($phaseOpen && $record["fromAddress"] == "0x0000000000000000000000000000000000000000") {
+                                $exist = UserNftModel::where([
+                                    "from_address" => "0x0000000000000000000000000000000000000000",
+                                    "to_address" => $record["toAddress"],
+                                    "network" => $settingNetwork["id"],
+                                    "token_address" => $settingNft["token_address"],
+                                    "ref_table" => "account_user"
+                                ])->first();
+
+                                // if address not exist then proceed
+                                if (!$exist) {
+                                    $success = SettingLogic::get("operator", ["code" => "success"]);
+
+                                    // record newly minted seed for register usage at auth, to address will be lowercase, uid and ref id = 0
+                                    UserNftModel::create([
+                                        "sn" => HelperLogic::generateUniqueSN("user_nft"),
+                                        "status" => $success["id"],
+                                        "txid" => $record["txid"],
+                                        "log_index" => $record["logIndex"],
+                                        "from_address" => $record["fromAddress"],
+                                        "to_address" => $record["toAddress"],
+                                        "network" => $settingNetwork["id"],
+                                        "token_address" => $settingNft["token_address"],
+                                        "completed_at" => date("Y-m-d H:i:s"),
+                                        "ref_table" => "account_user"
+                                    ]);
+                                }
                             }
                         }
                     }
