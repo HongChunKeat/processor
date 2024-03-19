@@ -184,7 +184,7 @@ class ReaderTransaction implements Consumer
                         b. if user have seed and seed is claimable 0, and user receive new seed then update claimed_at = now and claimable = 1
                         - if claimable = 1 nothing happened, because reward countdown is calculated based on the first seed they got
                     */
-                    if ($settingNft["name"] == "seed") {
+                    if ($settingNft["name"] == "plant") {
                         $toUser = AccountUserModel::where(Db::raw("LOWER(web3_address)"), strtolower($record["toAddress"]))
                             ->where("status", "active")
                             ->first();
